@@ -76,6 +76,11 @@ Motor entegrasyon testleri, adı `test` içermeyen veritabanında çalışmayı 
 `fiyat-motoru import-products katalog.csv`. EAN kontrol hanesi doğrulanır; aynı marka + model kodu güncellenir.
 
 **Fiyatlar:**
+- **Pazaryeri kontrolü ekranı** (`/kontrol`): ürün × pazaryeri matrisi. Her hücrede durum (kontrol edilmedi / eski /
+  Uşak ? / gönderim yok / güncel), pazaryerinin EAN ve model araması için doğrudan bağlantı ve “+ Gir” ile önseçimli fiyat
+  formu. API olmadan çalışmanın ana yolu budur. Pazaryeri fiyatları “Alış + rakip satış fiyatı” olarak tek seferde iki
+  tarafa kaydedilir. Pazarama, PttAVM, Koçtaş ve marka mağazalarının site içi arama adresi doğrulanamadığı için
+  Google `site:` araması kullanılır.
 - Ürün sayfasındaki form → `manual_entry` (kendi gördüğünüz/teyit ettiğiniz fiyatlar).
 - `fiyat-motoru import-csv --source <kaynak> --origin manual_entry|licensed_feed dosya.csv` (`templates/fiyat_sablonu.csv`).
   Distribütör/bayi listeleri ve lisanslı veri sağlayıcı dökümleri için `licensed_feed`.
@@ -101,9 +106,12 @@ Net kâr = Satış/(1+KDV)
 Ayrıca: marj, ROI (bağlanan sermayeye göre), başabaş satış fiyatı, hesaplanan/indirilecek/ödenecek KDV ve
 e-ticaret stopajının nakit etkisi (kâr kalemi değildir; mahsup edilir) raporlanır.
 
-**Önemli:** Pazaryeri komisyon/ücret oranları başlangıçta **varsayımdır** (`params_verified=false`, arayüzde uyarılı).
-Satıcı panelinizdeki güncel oranlarla *Maliyet ayarları* ekranından güncelleyin. Komisyonun KDV dahil satış fiyatı
-üzerinden hesaplandığı varsayılmıştır — sözleşmenizle teyit edin.
+**Komisyon oranları:** Kasım 2026'da kamuya açık üçüncü taraf rehberlerinde beyaz eşya için en sık tekrarlanan oranlar
+girildi: Trendyol %11, Hepsiburada %12, n11 %13 + %1,67 hizmet bedeli, Amazon TR %10, PttAVM %12. Pazarama için
+güvenilir oran bulunamadı; %15 temkinli yer tutucu. **Bu oranlar resmî değildir** ve kaynaklar birbiriyle çelişir
+(`params_verified=false`, arayüzde “teyit edilmedi”). Kaynaklar komisyonun hesaplandığı tutar konusunda da ayrışıyor;
+komisyon tabanı (KDV dahil / hariç) kanal bazında seçilebilir, varsayılan KDV dahildir (daha temkinli). Kategori bazlı
+oranlar *Maliyet ayarları* ekranından girilir.
 
 **Fırsat (FIRSAT etiketi)** = en iyi alış teklifi “Uygun” (Uşak teslimatı doğrulanmış, stokta, sıfır, faturalı,
 resmî/ithalatçı garantili, fiyat ≤ 48 saat) **ve** satış fiyatı test verisi değil **ve** net kâr ≥ eşik **ve** marj ≥ eşik.
@@ -112,13 +120,13 @@ resmî/ithalatçı garantili, fiyat ≤ 48 saat) **ve** satış fiyatı test ver
 
 | # | Özellik | Durum |
 |---|---|---|
-| 1 | Kaynak fiyat karşılaştırma | ✅ Ekran ve veri modeli çalışıyor. ⛔ **Hiçbir kaynağa otomatik bağlantı yok** — veri elle/CSV ile. |
+| 1 | Kaynak fiyat karşılaştırma | ✅ Ekran, veri modeli ve **pazaryeri kontrol matrisi** çalışıyor. ⛔ **Hiçbir kaynağa otomatik bağlantı yok** — fiyatı siz kontrol edip girersiniz. |
 | 2 | EAN/GTIN + tam model kodu eşleştirme | ✅ Çalışıyor, testli (TS + Python). |
 | 3 | En düşük alış fiyatı + kaynak bağlantısı | ✅ Çalışıyor (uygunluk önceliğiyle). |
 | 4 | Uşak'a gönderilemeyen / bölgesel kısıtlı ürünleri eleme | ✅ Çalışıyor. ⚠️ Teslimat doğrulaması şu an **elle** (otomatik posta kodu sorgusu kaynak API'lerine bağlı). |
 | 5 | Stok, fatura, garanti, teslimat uygunluğu | ✅ Kurallar çalışıyor; veri elle/CSV. |
 | 6 | Pazaryerlerinde satış fiyatı karşılaştırma | ✅ Ekran çalışıyor; satış fiyatları elle/CSV. Satıcı API'leri bağlanınca otomatikleşir. |
-| 7 | KDV, komisyon, nakliye, iade, stok maliyetli kâr | ✅ Çalışıyor, testli. ⚠️ Komisyon oranları varsayım — sizin doğrulamanız gerekli. |
+| 7 | KDV, komisyon, nakliye, iade, stok maliyetli kâr | ✅ Çalışıyor, testli; kategori bazlı komisyon ve KDV dahil/hariç komisyon tabanı. ⚠️ Oranlar kamuya açık rehberlerden — panelden teyit gerekli. |
 | 8 | Kârlılık ve satış hızına göre sıralama | ✅ Çalışıyor. ⚠️ Satış hızı şu an elle tahmin. |
 | 9 | Fiyat geçmişi grafikleri | ✅ Temel grafik (ürün sayfası). |
 | 10 | Bildirim ve satın alma listesi | 🟡 Şema hazır (`purchase_list_items`, onay kısıtı). Ekran ve bildirim kanalı **sonraki aşama**. |
@@ -144,4 +152,4 @@ kaynağa karşı canlı doğrulama yapılmadı.
    API'leri (satış fiyatı, gerçek komisyon) ve bir lisanslı fiyat feed'i (alış). Konnektör sözleşmesi hazır (`engine/fiyat_motoru/connectors/base.py`).
 2. Satın alma listesi + onay akışı ekranı, bildirimler (e-posta/Telegram), zamanlanmış toplama.
 3. Uşak depo stok ekranı (giriş/çıkış, seri no, stoktaki ürünün güncel kâr potansiyeli).
-4. Kategori bazlı komisyon ekranı, Supabase Auth + RLS, satış hızının kendi satış geçmişinden hesaplanması.
+4. Supabase Auth + RLS, satış hızının kendi satış geçmişinden hesaplanması.

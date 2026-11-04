@@ -94,7 +94,8 @@ export async function importProductsCsv(_: ActionState, f: FormData): Promise<Ac
 export async function addPriceObservation(_: ActionState, f: FormData): Promise<ActionState> {
   const productId = Number(str(f, "product_id"));
   const sourceId = str(f, "source_id");
-  const side = str(f, "side") === "sell" ? "sell" : "buy";
+  const sideRaw = str(f, "side");
+  const sides = sideRaw === "both" ? ["buy", "sell"] : sideRaw === "sell" ? ["sell"] : ["buy"];
   const url = str(f, "source_url");
   const price = num(f, "price");
   if (!productId || !sourceId) return { ok: false, message: "Ürün ve kaynak zorunlu", values: echo(f) };
@@ -110,25 +111,27 @@ export async function addPriceObservation(_: ActionState, f: FormData): Promise<
   const client = await db().connect();
   try {
     await client.query("begin");
-    const offerUrl = url || `${sourceId}:urun:${productId}:${side}`;
-    const o = await client.query(
-      `insert into offers (source_id, side, product_id, match_method, source_url, seller_name)
-       values ($1,$2,$3,'manual',$4,$5)
-       on conflict (source_id, source_url) do update set seller_name = coalesce(excluded.seller_name, offers.seller_name)
-       returning id, product_id`,
-      [sourceId, side, productId, offerUrl, str(f, "seller_name") || null],
-    );
-    if (o.rows[0].product_id !== productId) throw new Error("Bu bağlantı başka bir ürüne eşlenmiş");
-    await client.query(
-      `insert into price_observations (offer_id, observed_at, origin, collected_by, price, shipping_fee, in_stock,
-         delivery, delivery_method_note, delivery_days, regional_restriction, invoice, warranty, warranty_months, condition)
-       values ($1, coalesce($2::timestamptz, now()), 'manual_entry', 'web:elle', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-      [
-        o.rows[0].id, str(f, "observed_at") || null, price, shipping, triBool(f, "in_stock"), delivery, note || null,
-        num(f, "delivery_days"), str(f, "regional_restriction") || null, str(f, "invoice") || "unknown",
-        str(f, "warranty") || "unknown", num(f, "warranty_months"), str(f, "condition") || "unknown",
-      ],
-    );
+    for (const side of sides) {
+      const offerUrl = url || `${sourceId}:urun:${productId}:${side}`;
+      const o = await client.query(
+        `insert into offers (source_id, side, product_id, match_method, source_url, seller_name)
+         values ($1,$2,$3,'manual',$4,$5)
+         on conflict (source_id, side, source_url) do update set seller_name = coalesce(excluded.seller_name, offers.seller_name)
+         returning id, product_id`,
+        [sourceId, side, productId, offerUrl, str(f, "seller_name") || null],
+      );
+      if (o.rows[0].product_id !== productId) throw new Error("Bu bağlantı başka bir ürüne eşlenmiş");
+      await client.query(
+        `insert into price_observations (offer_id, observed_at, origin, collected_by, price, shipping_fee, in_stock,
+           delivery, delivery_method_note, delivery_days, regional_restriction, invoice, warranty, warranty_months, condition)
+         values ($1, coalesce($2::timestamptz, now()), 'manual_entry', 'web:elle', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [
+          o.rows[0].id, str(f, "observed_at") || null, price, shipping, triBool(f, "in_stock"), delivery, note || null,
+          num(f, "delivery_days"), str(f, "regional_restriction") || null, str(f, "invoice") || "unknown",
+          str(f, "warranty") || "unknown", num(f, "warranty_months"), str(f, "condition") || "unknown",
+        ],
+      );
+    }
     await client.query("commit");
   } catch (e) {
     await client.query("rollback");
@@ -138,7 +141,8 @@ export async function addPriceObservation(_: ActionState, f: FormData): Promise<
   }
   revalidatePath(`/urunler/${productId}`);
   revalidatePath("/firsatlar");
-  return { ok: true, message: "Fiyat gözlemi kaydedildi", values: echo(f) };
+  revalidatePath("/kontrol");
+  return { ok: true, message: sides.length === 2 ? "Alış + rakip satış fiyatı olarak kaydedildi" : "Fiyat gözlemi kaydedildi", values: echo(f) };
 }
 
 /** Son gözlemi kopyalayıp teslimat durumunu günceller (geçmiş korunur). */
@@ -192,8 +196,8 @@ export async function updateChannel(f: FormData) {
   if (vals.some((v) => v === null || v < 0)) throw new Error("Tüm alanlar sayı olmalı");
   await db().query(
     `update sales_channels set commission_rate=$2, payment_fee_rate=$3, fixed_fee_net=$4, outbound_shipping_net=$5,
-       return_rate=$6, withholding_rate=$7, params_verified=$8 where id=$1`,
-    [id, ...vals, str(f, "params_verified") === "on"],
+       return_rate=$6, withholding_rate=$7, params_verified=$8, commission_base=$9 where id=$1`,
+    [id, ...vals, str(f, "params_verified") === "on", str(f, "commission_base") === "net" ? "net" : "gross"],
   );
   revalidatePath("/ayarlar");
   revalidatePath("/firsatlar");
@@ -223,4 +227,22 @@ export async function updateFulfillment(f: FormData) {
   if (cost === null || perKm === null) throw new Error("Sayı girin");
   await db().query("update fulfillment_methods set cost_net=$2, cost_per_km=$3 where id=$1", [str(f, "id"), cost, perKm]);
   revalidatePath("/ayarlar");
+}
+
+export async function setCategoryCommission(f: FormData) {
+  const channelId = str(f, "channel_id");
+  const categoryId = Number(str(f, "category_id"));
+  const r = rate(f, "commission_rate");
+  if (r === null) {
+    await db().query("delete from channel_category_commissions where channel_id=$1 and category_id=$2", [channelId, categoryId]);
+  } else {
+    if (r < 0 || r >= 1) throw new Error("Oran %0–%100 arası olmalı");
+    await db().query(
+      `insert into channel_category_commissions (channel_id, category_id, commission_rate) values ($1,$2,$3)
+       on conflict (channel_id, category_id) do update set commission_rate = excluded.commission_rate`,
+      [channelId, categoryId, r],
+    );
+  }
+  revalidatePath("/ayarlar");
+  revalidatePath("/firsatlar");
 }

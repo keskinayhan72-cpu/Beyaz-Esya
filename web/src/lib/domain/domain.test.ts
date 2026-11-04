@@ -88,7 +88,7 @@ describe("ürün fırsat değerlendirmesi", () => {
     minProfitNet: 250, minMargin: 0.05,
   };
   const ch = (id: string, commissionRate: number): Channel => ({
-    id, name: id, sourceId: id, commissionRate, paymentFeeRate: 0, fixedFeeNet: 10, outboundShippingNet: 400,
+    id, name: id, sourceId: id, commissionRate, commissionBase: "gross", paymentFeeRate: 0, fixedFeeNet: 10, outboundShippingNet: 400,
     returnRate: 0.04, withholdingRate: 0.01, paramsVerified: true,
   });
   const offer = (id: number, price: number, patch: Partial<BuyOffer> = {}): BuyOffer => ({

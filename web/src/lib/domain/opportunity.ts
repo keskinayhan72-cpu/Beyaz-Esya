@@ -22,6 +22,7 @@ export type Channel = {
   name: string;
   sourceId: string | null;
   commissionRate: number;      // kategori özel oran varsa o uygulanmış hâli
+  commissionBase: "gross" | "net";
   paymentFeeRate: number;
   fixedFeeNet: number;
   outboundShippingNet: number;
@@ -83,6 +84,7 @@ export function buildProfitInput(
     inboundNet: s.inboundShippingNet,
     saleGross,
     commissionRate: ch.commissionRate,
+    commissionBase: ch.commissionBase,
     paymentFeeRate: ch.paymentFeeRate,
     fixedFeeNet: ch.fixedFeeNet,
     outboundShippingNet: ch.outboundShippingNet,

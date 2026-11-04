@@ -45,7 +45,7 @@ def ingest(conn: psycopg.Connection, connector: Connector) -> IngestResult:
                     """insert into offers (source_id, side, product_id, match_method, source_sku, source_url,
                                           seller_name, title, gtin_raw, model_code_raw, brand_raw)
                        values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                       on conflict (source_id, source_url) do update set
+                       on conflict (source_id, side, source_url) do update set
                          product_id = coalesce(offers.product_id, excluded.product_id),
                          match_method = case when offers.product_id is null then excluded.match_method else offers.match_method end,
                          seller_name = excluded.seller_name, title = excluded.title, gtin_raw = excluded.gtin_raw,

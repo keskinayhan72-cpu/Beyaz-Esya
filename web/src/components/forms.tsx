@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { addPriceObservation, createProduct, importProductsCsv, type ActionState } from "@/app/actions";
 
 type Counted = ActionState & { n?: number };
@@ -62,11 +62,16 @@ export function CsvImportForm() {
   );
 }
 
+type SourceOpt = { id: string; name: string; can_buy: boolean; can_sell: boolean; usak_check_hint: string | null };
+
 export function PriceEntryForm({
-  productId, sources,
-}: { productId: number; sources: { id: string; name: string; can_buy: boolean; can_sell: boolean }[] }) {
+  productId, sources, defaultSource,
+}: { productId: number; sources: SourceOpt[]; defaultSource?: string }) {
   const [state, action, pending] = useCountedAction(addPriceObservation);
   const v = (k: string) => (state?.values?.[k] ?? undefined);
+  const isMarketplace = (id?: string) => !!sources.find((x) => x.id === id && x.can_buy && x.can_sell);
+  const [sel, setSel] = useState(v("source_id") ?? defaultSource ?? sources[0]?.id);
+  const hint = sources.find((x) => x.id === sel)?.usak_check_hint;
   return (
     <form action={action} key={state?.n ?? 0}>
       <input type="hidden" name="product_id" value={productId} />
@@ -76,10 +81,14 @@ export function PriceEntryForm({
       </p>
       <div className="form">
         <label>Taraf
-          <select name="side" defaultValue={v("side")}><option value="buy">Alış (tedarik)</option><option value="sell">Satış (rakip/kanal fiyatı)</option></select>
+          <select name="side" defaultValue={v("side") ?? (isMarketplace(defaultSource) ? "both" : "buy")}>
+            <option value="both">Alış + rakip satış fiyatı (pazaryeri)</option>
+            <option value="buy">Yalnızca alış (tedarik)</option>
+            <option value="sell">Yalnızca satış (rakip/kanal fiyatı)</option>
+          </select>
         </label>
         <label>Kaynak
-          <select name="source_id" defaultValue={v("source_id")}>{sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+          <select name="source_id" defaultValue={v("source_id") ?? defaultSource} onChange={(e) => setSel(e.target.value)}>{sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
         </label>
         <label style={{ gridColumn: "span 2" }}>Ürün bağlantısı (URL)<input name="source_url" defaultValue={v("source_url")} type="url" placeholder="https://..." /></label>
         <label>Satıcı<input name="seller_name" defaultValue={v("seller_name")} /></label>
@@ -102,6 +111,7 @@ export function PriceEntryForm({
         <label>Uşak teslimatı
           <select name="delivery" defaultValue={v("delivery")}><option value="not_verified">Doğrulanmadı</option><option value="verified">Doğrulandı</option><option value="restricted">Gönderim yok / kısıtlı</option></select>
         </label>
+        {hint && <p className="small" style={{ gridColumn: "1 / -1", margin: 0, color: "var(--warn)" }}>Uşak kontrolü: {hint}</p>}
         <label style={{ gridColumn: "span 2" }}>Nasıl doğrulandı<input name="delivery_method_note" defaultValue={v("delivery_method_note")} placeholder="Ör: sepette 64100 posta koduyla teslimat göründü" /></label>
         <label>Teslim süresi (gün)<input name="delivery_days" defaultValue={v("delivery_days")} inputMode="numeric" /></label>
         <label style={{ gridColumn: "span 2" }}>Bölgesel kısıt notu<input name="regional_restriction" defaultValue={v("regional_restriction")} placeholder="Boş bırakın; varsa ürün elenir" /></label>

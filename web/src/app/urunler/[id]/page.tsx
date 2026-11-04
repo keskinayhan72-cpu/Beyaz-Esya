@@ -5,6 +5,7 @@ import {
   getPriceHistory, getProduct, getSettings, getSources, getVelocity, toBuyOffer, toSellRefs,
 } from "@/lib/db/queries";
 import { evaluateProduct } from "@/lib/domain/opportunity";
+import { buildSearchUrl } from "@/lib/domain/checks";
 import { displayGtin } from "@/lib/domain/identifiers";
 import { fmtDate, fmtPct, fmtTL } from "@/lib/format";
 import { DeliveryBadge, OriginBadge, PriceChart, StatusBadge, TestDataBanner } from "@/components/ui";
@@ -18,8 +19,11 @@ const INVOICE: Record<string, string> = { e_fatura: "e-Fatura", e_arsiv: "e-Arş
 const WARRANTY: Record<string, string> = { official_tr: "Resmî TR", importer: "İthalatçı", seller: "Satıcı", none: "Yok", unknown: "?" };
 const COND: Record<string, string> = { new: "Sıfır", refurbished: "Yenilenmiş", used: "2. el", unknown: "?" };
 
-export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProductPage({
+  params, searchParams,
+}: { params: Promise<{ id: string }>; searchParams: Promise<{ kaynak?: string }> }) {
   const id = Number((await params).id);
+  const { kaynak } = await searchParams;
   if (!Number.isInteger(id)) notFound();
   const product = await getProduct(id);
   if (!product) notFound();
@@ -56,6 +60,23 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       <h1>{product.brand} {product.model_code}</h1>
       <p className="sub">{product.name} · {product.category_name} · EAN {displayGtin(product.gtin)} · KDV {fmtPct(product.kdv_rate)}</p>
       <TestDataBanner show={hasTest} />
+
+      <div className="card">
+        <h2>Pazaryerlerinde ara</h2>
+        <div className="small" style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+          {sources.filter((s) => s.search_url_template).map((s) => {
+            const q = product.gtin ? displayGtin(product.gtin) : `${product.brand} ${product.model_code}`;
+            return (
+              <span key={s.id}>
+                {s.name}:{" "}
+                <a href={buildSearchUrl(s.search_url_template, q)!} target="_blank" rel="noreferrer">{product.gtin ? "EAN" : "model"}↗</a>
+                {product.gtin && <> · <a href={buildSearchUrl(s.search_url_template, `${product.brand} ${product.model_code}`)!} target="_blank" rel="noreferrer">model↗</a></>}
+              </span>
+            );
+          })}
+        </div>
+        <p className="small muted">Bulduğunuz fiyatı aşağıdaki “Fiyat gözlemi ekle” formuna girin.</p>
+      </div>
 
       <div className="card">
         <h2>Özet <StatusBadge status={r.status} /> {r.isOpportunity && <span className="badge b-ok">FIRSAT</span>}</h2>
@@ -179,9 +200,9 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
         <PriceChart series={[...seriesMap.values()]} />
       </div>
 
-      <div className="card">
+      <div className="card" id="fiyat-gir">
         <h2>Fiyat gözlemi ekle (elle)</h2>
-        <PriceEntryForm productId={id} sources={sources} />
+        <PriceEntryForm productId={id} sources={sources} defaultSource={kaynak} />
       </div>
     </>
   );

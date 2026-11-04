@@ -7,6 +7,7 @@ export type Source = {
   id: string; name: string; kind: string; base_url: string | null; can_buy: boolean; can_sell: boolean;
   integration_status: string; access_method: string; access_notes: string | null;
   last_success_at: Date | null; last_error: string | null;
+  search_url_template: string | null; usak_check_hint: string | null;
 };
 
 export type Category = { id: number; slug: string; name: string; kdv_rate: number };
@@ -30,6 +31,7 @@ export type ChannelRow = {
   id: string; name: string; source_id: string | null; kind: string; commission_rate: number;
   payment_fee_rate: number; fixed_fee_net: number; outbound_shipping_net: number; return_rate: number;
   withholding_rate: number; params_verified: boolean; notes: string | null;
+  commission_base: "gross" | "net"; params_source: string | null;
 };
 
 export type FulfillmentMethod = { id: string; name: string; cost_net: number; cost_per_km: number; notes: string | null };
@@ -86,6 +88,7 @@ export function channelsForCategory(
     return {
       id: c.id, name: c.name, sourceId: c.source_id,
       commissionRate: o ? o.commission_rate : c.commission_rate,
+      commissionBase: c.commission_base,
       paymentFeeRate: c.payment_fee_rate, fixedFeeNet: c.fixed_fee_net,
       outboundShippingNet: c.outbound_shipping_net, returnRate: c.return_rate,
       withholdingRate: c.withholding_rate, paramsVerified: c.params_verified,

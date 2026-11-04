@@ -18,11 +18,15 @@ def calculate_profit(i: dict[str, float]) -> dict[str, float | None]:
         v = i[k]
         if not isinstance(v, (int, float)) or math.isnan(v) or math.isinf(v) or v < 0:
             raise ValueError(f"Geçersiz değer: {k}={v}")
+    base = i.get("commissionBase", "gross")
+    if base not in ("gross", "net"):
+        raise ValueError(f"commissionBase geçersiz: {base}")
+    on_net = base == "net"
     k, sk = i["kdvRate"], i["serviceKdvRate"]
     sale_net = i["saleGross"] / (1 + k)
     purchase_net = i["purchaseGross"] / (1 + k)
     purchase_ship_net = i["purchaseShippingGross"] / (1 + sk)
-    commission = i["saleGross"] * i["commissionRate"]
+    commission = (sale_net if on_net else i["saleGross"]) * i["commissionRate"]
     payment_fee = i["saleGross"] * i["paymentFeeRate"] + i["fixedFeeNet"]
     return_risk = i["returnRate"] * (2 * i["outboundShippingNet"] + i["returnLossRate"] * purchase_net)
     holding = (purchase_net * i["annualCapitalCostRate"] * (i["daysInStock"] / 365)
@@ -35,7 +39,7 @@ def calculate_profit(i: dict[str, float]) -> dict[str, float | None]:
     output_vat = i["saleGross"] - sale_net
     input_vat = ((i["purchaseGross"] - purchase_net) + (i["purchaseShippingGross"] - purchase_ship_net)
                  + sk * (commission + payment_fee + i["outboundShippingNet"] + i["inboundNet"]))
-    per_unit = 1 / (1 + k) - i["commissionRate"] - i["paymentFeeRate"]
+    per_unit = 1 / (1 + k) - (i["commissionRate"] / (1 + k) if on_net else i["commissionRate"]) - i["paymentFeeRate"]
     return {
         "saleNet": sale_net, "purchaseNet": purchase_net, "purchaseShippingNet": purchase_ship_net,
         "inboundNet": i["inboundNet"], "commissionNet": commission, "paymentFeeNet": payment_fee,

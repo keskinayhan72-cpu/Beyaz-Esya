@@ -1,12 +1,15 @@
-import { getChannelRows, getFulfillmentMethods, getSettingsRow } from "@/lib/db/queries";
-import { updateChannel, updateFulfillment, updateSettings } from "@/app/actions";
+import { getCategories, getCategoryCommissions, getChannelRows, getFulfillmentMethods, getSettingsRow } from "@/lib/db/queries";
+import { setCategoryCommission, updateChannel, updateFulfillment, updateSettings } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
 const pct = (n: number) => +(n * 100).toFixed(4);
 
 export default async function Settings() {
-  const [channels, s, fms] = await Promise.all([getChannelRows(), getSettingsRow(), getFulfillmentMethods()]);
+  const [channels, s, fms, categories, catComm] = await Promise.all([
+    getChannelRows(), getSettingsRow(), getFulfillmentMethods(), getCategories(), getCategoryCommissions(),
+  ]);
+  const marketplaces = channels.filter((c) => c.kind === "marketplace");
   return (
     <>
       <h1>Maliyet ayarları</h1>
@@ -19,17 +22,20 @@ export default async function Settings() {
         )}
         <table>
           <thead><tr>
-            <th>Kanal</th><th>Komisyon %</th><th>Ödeme/POS %</th><th>Sabit ücret ₺</th><th>Müşteriye kargo ₺</th>
+            <th>Kanal</th><th>Komisyon %</th><th>Komisyon tabanı</th><th>Ödeme/POS %</th><th>Sabit ücret ₺</th><th>Müşteriye kargo ₺</th>
             <th>İade oranı %</th><th>Stopaj %</th><th>Doğrulandı</th><th></th>
           </tr></thead>
           <tbody>
             {channels.map((c) => (
               <tr key={c.id}>
-                <td><b>{c.name}</b><div className="small muted">{c.notes}</div></td>
-                <td colSpan={8}>
+                <td style={{ maxWidth: 320 }}><b>{c.name}</b>{c.params_verified ? <span className="badge b-ok" style={{ marginLeft: 6 }}>doğrulandı</span> : <span className="badge b-warn" style={{ marginLeft: 6 }}>teyit edilmedi</span>}<div className="small muted">{c.params_source ?? c.notes}</div></td>
+                <td colSpan={9}>
                   <form action={updateChannel} className="inline">
                     <input type="hidden" name="id" value={c.id} />
                     <input name="commission_rate" defaultValue={pct(c.commission_rate)} size={5} />
+                    <select name="commission_base" defaultValue={c.commission_base}>
+                      <option value="gross">KDV dahil fiyat</option><option value="net">KDV hariç fiyat</option>
+                    </select>
                     <input name="payment_fee_rate" defaultValue={pct(c.payment_fee_rate)} size={5} />
                     <input name="fixed_fee_net" defaultValue={c.fixed_fee_net} size={6} />
                     <input name="outbound_shipping_net" defaultValue={c.outbound_shipping_net} size={6} />
@@ -43,7 +49,36 @@ export default async function Settings() {
             ))}
           </tbody>
         </table>
-        <p className="small muted">Kategoriye özel komisyonlar <code>channel_category_commissions</code> tablosunda tutulur (ekranı sonraki aşamada).</p>
+      </div>
+
+      <div className="card tablewrap">
+        <h2>Kategori bazlı komisyon (%)</h2>
+        <p className="small muted">
+          Boş = kanalın genel oranı kullanılır. Pazaryerleri beyaz eşya alt kategorilerinde (buzdolabı, çamaşır makinesi vb.)
+          farklı oran uygulayabilir; satıcı panelinizdeki oranı girip Enter'a basın. Silmek için alanı boşaltıp kaydedin.
+        </p>
+        <table>
+          <thead><tr><th>Kategori</th>{marketplaces.map((c) => <th key={c.id}>{c.name}<div className="small muted">genel %{pct(c.commission_rate)}</div></th>)}</tr></thead>
+          <tbody>
+            {categories.map((cat) => (
+              <tr key={cat.id}>
+                <td>{cat.name}</td>
+                {marketplaces.map((c) => {
+                  const o = catComm.find((x) => x.channel_id === c.id && x.category_id === cat.id);
+                  return (
+                    <td key={c.id}>
+                      <form action={setCategoryCommission} className="inline">
+                        <input type="hidden" name="channel_id" value={c.id} />
+                        <input type="hidden" name="category_id" value={cat.id} />
+                        <input name="commission_rate" defaultValue={o ? pct(o.commission_rate) : ""} size={4} placeholder="—" aria-label={`${c.name} ${cat.name}`} />
+                      </form>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <div className="card">

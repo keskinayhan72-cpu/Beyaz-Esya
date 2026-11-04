@@ -14,6 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav>
               <Link href="/">Panel</Link>
               <Link href="/urunler">Katalog</Link>
+              <Link href="/kontrol">Pazaryeri kontrolü</Link>
               <Link href="/firsatlar">Fırsatlar</Link>
               <Link href="/kaynaklar">Kaynaklar</Link>
               <Link href="/ayarlar">Maliyet ayarları</Link>

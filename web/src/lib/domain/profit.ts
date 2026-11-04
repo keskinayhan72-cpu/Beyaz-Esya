@@ -5,8 +5,8 @@
  * Varsayımlar (README'de ayrıntılı):
  *  - Alış ve satış fiyatları KDV DAHİL girilir; kâr KDV HARİÇ hesaplanır
  *    (KDV, indirim mekanizmasıyla devlete aktarılan geçiş kalemidir).
- *  - Pazaryeri komisyonu KDV dahil satış fiyatı üzerinden hesaplanır; komisyon
- *    faturasındaki KDV indirilebilir.
+ *  - Pazaryeri komisyonu, kanala göre KDV dahil ('gross', varsayılan) veya KDV hariç
+ *    ('net') satış fiyatı üzerinden hesaplanır; komisyon faturasındaki KDV indirilebilir.
  *  - İade riski = iade oranı × (gidiş + dönüş kargo + iade edilen ürünün değer kaybı).
  *  - Stok maliyeti = sermaye maliyeti (yıllık oran × gün/365) + aylık depolama.
  *  - E-ticaret stopajı kâr kalemi değildir (gelir vergisinden mahsup edilir);
@@ -21,6 +21,7 @@ export type ProfitInput = {
   inboundNet: number;             // depoya ek taşıma (KDV hariç)
   saleGross: number;              // KDV dahil satış fiyatı
   commissionRate: number;
+  commissionBase?: "gross" | "net"; // varsayılan: gross
   paymentFeeRate: number;
   fixedFeeNet: number;
   outboundShippingNet: number;    // müşteriye gönderim veya teslimat maliyeti (KDV hariç)
@@ -58,14 +59,16 @@ export type ProfitBreakdown = {
 
 export function calculateProfit(i: ProfitInput): ProfitBreakdown {
   for (const [k, v] of Object.entries(i)) {
-    if (!Number.isFinite(v) || v < 0) throw new Error(`Geçersiz değer: ${k}=${v}`);
+    if (k === "commissionBase") continue;
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0) throw new Error(`Geçersiz değer: ${k}=${v}`);
   }
   const k = i.kdvRate;
   const sk = i.serviceKdvRate;
   const saleNet = i.saleGross / (1 + k);
   const purchaseNet = i.purchaseGross / (1 + k);
   const purchaseShippingNet = i.purchaseShippingGross / (1 + sk);
-  const commissionNet = i.saleGross * i.commissionRate;
+  const onNet = i.commissionBase === "net";
+  const commissionNet = (onNet ? saleNet : i.saleGross) * i.commissionRate;
   const paymentFeeNet = i.saleGross * i.paymentFeeRate + i.fixedFeeNet;
   const returnRiskNet = i.returnRate * (2 * i.outboundShippingNet + i.returnLossRate * purchaseNet);
   const holdingCostNet =
@@ -86,7 +89,7 @@ export function calculateProfit(i: ProfitInput): ProfitBreakdown {
     (i.purchaseShippingGross - purchaseShippingNet) +
     sk * (commissionNet + paymentFeeNet + i.outboundShippingNet + i.inboundNet);
 
-  const perUnitSale = 1 / (1 + k) - i.commissionRate - i.paymentFeeRate;
+  const perUnitSale = 1 / (1 + k) - (onNet ? i.commissionRate / (1 + k) : i.commissionRate) - i.paymentFeeRate;
   const breakEvenSaleGross = perUnitSale > 0 ? fixedCosts / perUnitSale : null;
 
   return {
