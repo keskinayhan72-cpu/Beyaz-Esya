@@ -123,7 +123,7 @@ resmî/ithalatçı garantili, fiyat ≤ 48 saat) **ve** satış fiyatı test ver
 
 | # | Özellik | Durum |
 |---|---|---|
-| 1 | Kaynak fiyat karşılaştırma | ✅ Ekran, veri modeli ve **pazaryeri kontrol matrisi** çalışıyor. 🟡 İzinli tarama okuyucusu (`crawl`) yazıldı ve testli, ama ⛔ **hiçbir kaynakta açık değil**: izinler bu ortamdan doğrulanamadı ve siteler erişilemedi. Fiyatı şimdilik siz kontrol edip girersiniz. |
+| 1 | Kaynak fiyat karşılaştırma | ✅ Ekran, veri modeli ve **pazaryeri kontrol matrisi** çalışıyor. 🟡 İzinli tarama okuyucusu (`crawl`) yazıldı ve testli, ama ⛔ **hiçbir kaynakta açık değil**: 12 sitenin izin incelemesinde uygun kaynak çıkmadı (aşağıdaki tablo). Fiyatı şimdilik siz kontrol edip girersiniz. |
 | 2 | EAN/GTIN + tam model kodu eşleştirme | ✅ Çalışıyor, testli (TS + Python). |
 | 3 | En düşük alış fiyatı + kaynak bağlantısı | ✅ Çalışıyor (uygunluk önceliğiyle). |
 | 4 | Uşak'a gönderilemeyen / bölgesel kısıtlı ürünleri eleme | ✅ Çalışıyor. ⚠️ Teslimat doğrulaması şu an **elle** (otomatik posta kodu sorgusu kaynak API'lerine bağlı). |
@@ -147,12 +147,35 @@ resmî/ithalatçı garantili, fiyat ≤ 48 saat) **ve** satış fiyatı test ver
 | Elle giriş, Uşak perakende | ✅ Çalışıyor | — |
 | akakçe | 🟡 Eklentiyle tek tıkla | robots.txt ürün sayfalarına izin veriyor, ancak kullanım sözleşmesi (md. 5.6, 7.5/b) listelerin izinsiz kopyalanmasını yasaklıyor; otomatik toplu çekim yapılmıyor. |
 | Tüm siteler | 🟡 Eklentiyle tek tıkla | Okuma schema.org JSON-LD üzerinden; gerçek sitelerde henüz denenmedi. |
-| Tüm siteler (otomatik) | 🟡 Okuyucu hazır, hiçbir kaynakta açık değil | `fiyat-motoru crawl --source <id>` (aşağıya bakın). Bir kaynak ancak robots.txt ve kullanım koşulları incelenip `access_method='permitted_crawl'` yapılınca çalışır. Hiçbir kaynağın izni bu ortamdan doğrulanamadı; bu yüzden hepsi kapalı. |
+| Tüm siteler (otomatik) | 🟡 Okuyucu hazır, hiçbir kaynakta açık değil | `fiyat-motoru crawl --source <id>` (aşağıya bakın). 4 Kasım 2026 incelemesinde 12 sitenin hiçbiri uygun çıkmadı: 6'sı bot korumasıyla engelledi, diğerleri arama sayfalarını yasaklıyor, 403/CAPTCHA döndürüyor veya kullanım koşulları izin vermiyor. Ayrıntı aşağıdaki tabloda. |
 
-Bu geliştirme ortamının ağ politikası pazaryeri alan adlarına ve supabase.com'a erişime izin vermiyor; bu yüzden hiçbir
-kaynağa karşı canlı doğrulama yapılmadı. 4 Kasım 2026'da 12 sitenin (trendyol, hepsiburada, amazon.com.tr, n11, pazarama,
-pttavm, akakce, cimri, mediamarkt, teknosa, vatanbilgisayar, koctas) robots.txt dosyası bulut ortamından yeniden denendi:
-hepsi ağ politikası tarafından reddedildi (proxy 403 / DNS çözülemedi). Gerçek fiyat okunmadı.
+### İzin incelemesi (4 Kasım 2026)
+
+Kendi User-Agent'ımızla (`BeyazEsyaFirsatMotoru/0.1`), istekler arası en az 5 sn bekleyerek okundu. Bot koruması
+görülen hiçbir yerde aşma denenmedi. Sonuçlar `db/seed/004_crawl_review.sql` ile `sources.last_error` /
+`access_notes` alanlarına yazıldı (Kaynaklar ekranında görünür).
+
+| Site | robots.txt | Ürün sayfası | Arama sayfası | Kullanım koşulları | Sonuç |
+|---|---|---|---|---|---|
+| trendyol.com | okundu | ✅ izinli | ⛔ `/*?q=` yasak | Resmî metin okunamadı (JavaScript); kamuya açık alıntılara göre robot/veri madenciliği yasak | ⛔ Kapalı (doğrulanamadı) |
+| akakce.com | okundu | ✅ izinli | ✅ izinli | ⛔ Veritabanı/katalog/listelerin izinsiz çoğaltılması yasak | ⛔ Kapalı (eklentiyle elle) |
+| amazon.com.tr | okundu | ✅ izinli | ✅ izinli | Metin okunamadı; veri madenciliği/robot araçlarını yasakladığı biliniyor | ⛔ Ana sayfada CAPTCHA |
+| cimri.com | okundu | ✅ izinli | ⛔ `/arama`, `/*?q=` yasak | Okunamadı | ⛔ Ana sayfa 403 |
+| mediamarkt.com.tr | okundu | ✅ izinli | ⛔ `/*/search.html`, `/*query=` yasak | Okunamadı | ⛔ Ana sayfa 403 |
+| vatanbilgisayar.com | okundu | ✅ izinli | ⛔ `/arama/*` yasak | Okunamadı | ⛔ Ana sayfa 403 |
+| hepsiburada.com | 403 (Akamai) | — | — | — | ⛔ Bot koruması |
+| n11.com | 403 (Cloudflare) | — | — | — | ⛔ Bot koruması |
+| pazarama.com | 403 | — | — | — | ⛔ Bot koruması |
+| pttavm.com | 403 | — | — | — | ⛔ Bot koruması |
+| teknosa.com | 403 | — | — | — | ⛔ Bot koruması |
+| koctas.com.tr | 403 (Akamai) | — | — | — | ⛔ Bot koruması |
+
+**Sonuç: Hiçbir kaynak otomatik okumaya uygun değil, gerçek fiyat okunmadı.** Okuyucu hazır ama hiçbir kaynakta açık
+değil. Gerçekçi yollar: satıcı API'leri (Trendyol, Hepsiburada, n11, Amazon SP-API), affiliate/lisanslı feed'ler
+(`import-csv --origin licensed_feed`) ve baktığınız sayfadan tek tıkla okuyan tarayıcı eklentisi (`extension/`).
+
+İnceleme sırasında bulunan hata: Python'un `urllib.robotparser` modülü `*`/`$` jokerlerini desteklemediği için
+`/*?q=` gibi yasakları görmüyordu. `connectors/robots.py` (RFC 9309) ile değiştirildi ve testlendi.
 
 ### Otomatik okuyucu: `crawl`
 

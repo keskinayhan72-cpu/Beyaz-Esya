@@ -82,3 +82,15 @@ def test_fetcher_rate_limits_per_host():
     before = t[0]
     f.get("https://shop.example/b")
     assert t[0] - before >= 5
+
+
+def test_robots_wildcards_groups_and_precedence():
+    from fiyat_motoru.connectors.robots import Robots
+    r = Robots.parse("﻿User-agent: *\nUser-agent: Googlebot\nDisallow: /*?q=\nDisallow: /arama\n"
+                     "Disallow: /*.pdf$\nAllow: /arama/izinli\n\nUser-agent: KotuBot\nDisallow: /\n")
+    ok = lambda p: r.can_fetch("BeyazEsyaFirsatMotoru", "https://s.invalid" + p)  # noqa: E731
+    assert not ok("/sr?q=WAN28281TR")          # urllib.robotparser bunu izinli sanır
+    assert not ok("/arama?x=1") and ok("/arama/izinli/1")   # en uzun kural kazanır
+    assert not ok("/dosya.pdf") and ok("/dosya.pdf?v=1")    # '$' satır sonu
+    assert ok("/bosch/wan28281tr-p-123")
+    assert ok("/x")

@@ -13,14 +13,15 @@ from __future__ import annotations
 
 import time
 import urllib.request
-import urllib.robotparser
 from dataclasses import dataclass, field
 from typing import Callable
 from urllib.parse import urlsplit
 
 from .base import AccessBlocked, NotConfigured
+from .robots import Robots
 
-USER_AGENT = "BeyazEsyaFirsatMotoru/0.1 (+fiyat karsilastirma; iletisim icin site sahibine yazin)"
+PRODUCT_TOKEN = "BeyazEsyaFirsatMotoru"
+USER_AGENT = f"{PRODUCT_TOKEN}/0.1 (+fiyat karsilastirma; iletisim icin site sahibine yazin)"
 
 CHALLENGE_MARKERS = (
     "captcha", "g-recaptcha", "hcaptcha", "cf-challenge", "challenge-platform",
@@ -57,21 +58,21 @@ class PoliteFetcher:
     transport: Transport = _urllib_transport
     clock: Callable[[], float] = time.monotonic
     sleep: Callable[[float], None] = time.sleep
-    _robots: dict[str, urllib.robotparser.RobotFileParser] = field(default_factory=dict)
+    _robots: dict[str, Robots] = field(default_factory=dict)
     _last: dict[str, float] = field(default_factory=dict)
 
-    def _robots_for(self, url: str) -> urllib.robotparser.RobotFileParser:
+    def _robots_for(self, url: str) -> Robots:
         parts = urlsplit(url)
         base = f"{parts.scheme}://{parts.netloc}"
         if base not in self._robots:
-            rp = urllib.robotparser.RobotFileParser()
             resp = self.transport(f"{base}/robots.txt", {"User-Agent": USER_AGENT})
-            if resp.status in (401, 403):
-                rp.disallow_all = True       # robots.txt'e bile erişim yoksa: izin yok say
+            rp = Robots()
+            if resp.status in (401, 403, 429) or resp.status >= 500:
+                rp.disallow_all = True       # robots.txt'e erişilemiyor/engelli: izin yok say
             elif resp.status >= 400:
                 rp.allow_all = True          # robots.txt yok (404): standart gereği kısıt yok
             else:
-                rp.parse(resp.text.splitlines())
+                rp = Robots.parse(resp.text)
             self._robots[base] = rp
         return self._robots[base]
 
@@ -80,7 +81,7 @@ class PoliteFetcher:
             raise NotConfigured(f"{self.source_id}: izinli tarama etkin değil (kullanım koşulları teyidi gerekli)")
         if urlsplit(url).scheme not in ("http", "https"):
             raise ValueError("yalnızca http/https")
-        if not self._robots_for(url).can_fetch(USER_AGENT, url):
+        if not self._robots_for(url).can_fetch(PRODUCT_TOKEN, url):
             raise AccessBlocked(f"robots.txt izin vermiyor: {url}")
         host = urlsplit(url).netloc
         wait = self.min_delay_s - (self.clock() - self._last.get(host, -1e9))
