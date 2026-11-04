@@ -1,0 +1,46 @@
+{
+  "_doc": "Kâr hesabı için elle hesaplanmış referans vakalar. web (vitest) ve engine (pytest) aynı dosyayı kullanır. Değerler gerçek fiyat değildir.",
+  "cases": [
+    {
+      "name": "karli_pazaryeri",
+      "input": {
+        "purchaseGross": 18000, "purchaseShippingGross": 0, "kdvRate": 0.2, "serviceKdvRate": 0.2,
+        "inboundNet": 300, "saleGross": 30000, "commissionRate": 0.15, "paymentFeeRate": 0,
+        "fixedFeeNet": 10, "outboundShippingNet": 400, "returnRate": 0.04, "returnLossRate": 0.05,
+        "annualCapitalCostRate": 0.45, "daysInStock": 21, "storageCostMonthNet": 30, "handlingNet": 50,
+        "withholdingRate": 0.01
+      },
+      "expected": {
+        "saleNet": 25000, "purchaseNet": 15000, "commissionNet": 4500, "returnRiskNet": 62,
+        "holdingCostNet": 409.356164, "netProfit": 4268.643836, "margin": 0.170746,
+        "roi": 0.278996, "outputVat": 5000, "inputVat": 4042, "vatPayable": 958,
+        "withholding": 250, "cashOutlay": 18000
+      }
+    },
+    {
+      "name": "zararli_pazaryeri",
+      "input": {
+        "purchaseGross": 24000, "purchaseShippingGross": 0, "kdvRate": 0.2, "serviceKdvRate": 0.2,
+        "inboundNet": 300, "saleGross": 30000, "commissionRate": 0.15, "paymentFeeRate": 0,
+        "fixedFeeNet": 10, "outboundShippingNet": 400, "returnRate": 0.04, "returnLossRate": 0.05,
+        "annualCapitalCostRate": 0.45, "daysInStock": 21, "storageCostMonthNet": 30, "handlingNet": 50,
+        "withholdingRate": 0.01
+      },
+      "expected": { "purchaseNet": 20000, "returnRiskNet": 72, "holdingCostNet": 538.808219, "netProfit": -870.808219 }
+    },
+    {
+      "name": "perakende_kargolu_alis",
+      "input": {
+        "purchaseGross": 12000, "purchaseShippingGross": 240, "kdvRate": 0.2, "serviceKdvRate": 0.2,
+        "inboundNet": 0, "saleGross": 14400, "commissionRate": 0, "paymentFeeRate": 0.02,
+        "fixedFeeNet": 0, "outboundShippingNet": 150, "returnRate": 0.01, "returnLossRate": 0.05,
+        "annualCapitalCostRate": 0, "daysInStock": 0, "storageCostMonthNet": 0, "handlingNet": 0,
+        "withholdingRate": 0
+      },
+      "expected": {
+        "saleNet": 12000, "purchaseNet": 10000, "purchaseShippingNet": 200, "paymentFeeNet": 288,
+        "returnRiskNet": 8, "netProfit": 1354, "inputVat": 2127.6, "vatPayable": 272.4
+      }
+    }
+  ]
+}

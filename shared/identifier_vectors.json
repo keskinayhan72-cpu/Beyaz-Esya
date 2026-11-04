@@ -1,0 +1,19 @@
+{
+  "gtin": [
+    {"raw": "4006381333931", "valid": true,  "normalized": "04006381333931"},
+    {"raw": "400-6381-333931", "valid": true, "normalized": "04006381333931"},
+    {"raw": "4006381333932", "valid": false, "normalized": null},
+    {"raw": "73513537",      "valid": true,  "normalized": "00000073513537"},
+    {"raw": "036000291452",  "valid": true,  "normalized": "00036000291452"},
+    {"raw": "0000000000000", "valid": false, "normalized": null},
+    {"raw": "12345",         "valid": false, "normalized": null},
+    {"raw": "ABC4006381333931", "valid": false, "normalized": null}
+  ],
+  "code": [
+    {"raw": "WAN 28281 TR", "normalized": "WAN28281TR"},
+    {"raw": "bms-9750.i",   "normalized": "BMS9750I"},
+    {"raw": "Arçelik",      "normalized": "ARCELIK"},
+    {"raw": "Beko İnci/Ğ",  "normalized": "BEKOINCIG"},
+    {"raw": "",             "normalized": ""}
+  ]
+}
