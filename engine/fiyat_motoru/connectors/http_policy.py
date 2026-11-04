@@ -44,6 +44,9 @@ def _urllib_transport(url: str, headers: dict) -> Response:
             return Response(r.status, r.read().decode("utf-8", errors="replace"))
     except urllib.error.HTTPError as e:
         return Response(e.code, e.read().decode("utf-8", errors="replace") if e.fp else "")
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        # Ağ/proxy siteye ulaşamıyor: yeniden deneme veya başka yol yok; kaynak durur ve sebep kaydedilir.
+        raise AccessBlocked(f"siteye bağlanılamadı ({getattr(e, 'reason', e)}); çalıştırma durduruldu") from e
 
 
 @dataclass

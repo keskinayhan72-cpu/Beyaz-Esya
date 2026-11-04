@@ -4,6 +4,7 @@
   fiyat-motoru import-products katalog.csv
   fiyat-motoru import-csv --source manuel --origin manual_entry fiyatlar.csv
   fiyat-motoru rematch
+  fiyat-motoru crawl --source teknosa [--product-id 3] [--url https://...]
 
 DATABASE_URL ortam değişkeni zorunlu.
 """
@@ -19,6 +20,8 @@ from pathlib import Path
 import psycopg
 
 from .connectors.csv_feed import CsvFeedConnector
+from .connectors.http_policy import PoliteFetcher
+from .connectors.permitted_crawl import MIN_DELAY_S, PermittedCrawlConnector, Target
 from .connectors.registry import PLANS
 from .db import ingest, rematch, upsert_product
 
@@ -75,6 +78,43 @@ def cmd_rematch(_: argparse.Namespace) -> int:
     return 0
 
 
+def same_host(a: str | None, b: str | None) -> bool:
+    from urllib.parse import urlsplit
+    if not (a and b):
+        return False
+    ha, hb = (urlsplit(x).netloc.lower().removeprefix("www.") for x in (a, b))
+    return ha == hb
+
+
+def cmd_crawl(a: argparse.Namespace) -> int:
+    with _conn() as c:
+        row = c.execute("select access_method::text, base_url, search_url_template from sources where id=%s",
+                        (a.source,)).fetchone()
+        if not row:
+            sys.exit(f"bilinmeyen kaynak: {a.source}")
+        method, base_url, template = row
+        # Arama şablonu kaynağın kendi sitesinde değilse (ör. Google araması) kullanılmaz.
+        if not same_host(template, base_url):
+            template = None
+        q = "select brand, model_code, gtin from products where is_active"
+        params: tuple = ()
+        if a.product_id:
+            q += " and id = any(%s)"
+            params = (a.product_id,)
+        targets = [] if a.url and not a.product_id else [Target(*r) for r in c.execute(q, params).fetchall()]
+        fetcher = PoliteFetcher(a.source, permitted=(method == "permitted_crawl"), min_delay_s=max(a.delay, MIN_DELAY_S))
+        conn_ = PermittedCrawlConnector(a.source, fetcher, search_url_template=template, targets=targets,
+                                        urls=a.url or [])
+        r = ingest(c, conn_)
+        if r.status in ("ok", "partial") and r.seen > 0:
+            c.execute("update sources set integration_status='live' where id=%s", (a.source,))
+            c.commit()
+    print(f"çalıştırma #{r.run_id} [{r.status}] görülen={r.seen} eşleşen={r.matched} eşleşmeyen={r.unmatched}")
+    for e in r.errors:
+        print("  " + e)
+    return 0 if r.status in ("ok", "partial") else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="fiyat-motoru")
     sub = p.add_subparsers(required=True)
@@ -88,6 +128,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("file")
     s.set_defaults(fn=cmd_import_csv)
     sub.add_parser("rematch", help="Eşleşmeyen ilanları yeniden eşleştir").set_defaults(fn=cmd_rematch)
+    s = sub.add_parser("crawl", help="İzinli kaynaktan fiyat oku (robots.txt + izin + ≥5 sn bekleme)")
+    s.add_argument("--source", required=True)
+    s.add_argument("--product-id", type=int, action="append", help="yalnızca bu katalog ürünleri (tekrarlanabilir)")
+    s.add_argument("--url", action="append", help="doğrudan ürün sayfası adresi (tekrarlanabilir)")
+    s.add_argument("--delay", type=float, default=MIN_DELAY_S, help="istekler arası bekleme (en az 5 sn)")
+    s.set_defaults(fn=cmd_crawl)
     a = p.parse_args(argv)
     return a.fn(a)
 

@@ -123,7 +123,7 @@ resmî/ithalatçı garantili, fiyat ≤ 48 saat) **ve** satış fiyatı test ver
 
 | # | Özellik | Durum |
 |---|---|---|
-| 1 | Kaynak fiyat karşılaştırma | ✅ Ekran, veri modeli ve **pazaryeri kontrol matrisi** çalışıyor. ⛔ **Hiçbir kaynağa otomatik bağlantı yok** — fiyatı siz kontrol edip girersiniz. |
+| 1 | Kaynak fiyat karşılaştırma | ✅ Ekran, veri modeli ve **pazaryeri kontrol matrisi** çalışıyor. 🟡 İzinli tarama okuyucusu (`crawl`) yazıldı ve testli, ama ⛔ **hiçbir kaynakta açık değil**: izinler bu ortamdan doğrulanamadı ve siteler erişilemedi. Fiyatı şimdilik siz kontrol edip girersiniz. |
 | 2 | EAN/GTIN + tam model kodu eşleştirme | ✅ Çalışıyor, testli (TS + Python). |
 | 3 | En düşük alış fiyatı + kaynak bağlantısı | ✅ Çalışıyor (uygunluk önceliğiyle). |
 | 4 | Uşak'a gönderilemeyen / bölgesel kısıtlı ürünleri eleme | ✅ Çalışıyor. ⚠️ Teslimat doğrulaması şu an **elle** (otomatik posta kodu sorgusu kaynak API'lerine bağlı). |
@@ -147,9 +147,29 @@ resmî/ithalatçı garantili, fiyat ≤ 48 saat) **ve** satış fiyatı test ver
 | Elle giriş, Uşak perakende | ✅ Çalışıyor | — |
 | akakçe | 🟡 Eklentiyle tek tıkla | robots.txt ürün sayfalarına izin veriyor, ancak kullanım sözleşmesi (md. 5.6, 7.5/b) listelerin izinsiz kopyalanmasını yasaklıyor; otomatik toplu çekim yapılmıyor. |
 | Tüm siteler | 🟡 Eklentiyle tek tıkla | Okuma schema.org JSON-LD üzerinden; gerçek sitelerde henüz denenmedi. |
+| Tüm siteler (otomatik) | 🟡 Okuyucu hazır, hiçbir kaynakta açık değil | `fiyat-motoru crawl --source <id>` (aşağıya bakın). Bir kaynak ancak robots.txt ve kullanım koşulları incelenip `access_method='permitted_crawl'` yapılınca çalışır. Hiçbir kaynağın izni bu ortamdan doğrulanamadı; bu yüzden hepsi kapalı. |
 
 Bu geliştirme ortamının ağ politikası pazaryeri alan adlarına ve supabase.com'a erişime izin vermiyor; bu yüzden hiçbir
-kaynağa karşı canlı doğrulama yapılmadı.
+kaynağa karşı canlı doğrulama yapılmadı. 4 Kasım 2026'da 12 sitenin (trendyol, hepsiburada, amazon.com.tr, n11, pazarama,
+pttavm, akakce, cimri, mediamarkt, teknosa, vatanbilgisayar, koctas) robots.txt dosyası bulut ortamından yeniden denendi:
+hepsi ağ politikası tarafından reddedildi (proxy 403 / DNS çözülemedi). Gerçek fiyat okunmadı.
+
+### Otomatik okuyucu: `crawl`
+
+```bash
+fiyat-motoru crawl --source teknosa                    # katalogdaki tüm ürünler (EAN, yoksa marka + model ile arama)
+fiyat-motoru crawl --source teknosa --product-id 3     # tek ürün
+fiyat-motoru crawl --source teknosa --url https://...  # doğrudan ürün sayfası
+```
+
+- Fiyat, stok, satıcı ve durum yalnızca sayfadaki **schema.org JSON-LD** verisinden okunur. Yapılandırılmış veri yoksa
+  hiçbir şey tahmin edilmez, ürün atlanır ve hata listesine yazılır.
+- EAN farklıysa ya da model kodu birebir aynı değilse (ör. `WAN28281` ≠ `WAN28281TR`) teklif alınmaz.
+- Uşak teslimatı sayfadan doğrulanamaz, bu yüzden her zaman `delivery='not_verified'` kaydedilir.
+- `PoliteFetcher` üzerinden çalışır: izin bayrağı, robots.txt, en az 5 sn bekleme. CAPTCHA, 403/429/503 ya da bağlantı
+  hatasında kaynak durur ve sebebi `sources.last_error` alanına yazılır (Kaynaklar ekranında görünür).
+- Kaynağın arama şablonu kendi sitesinde değilse (ör. Google araması) arama yapılmaz; yalnızca `--url` kullanılabilir.
+- Başarılı bir okumadan sonra kaynak `integration_status='live'` olur. Kayıtlar `origin='permitted_crawl'` ile işaretlenir.
 
 ## Sonraki aşamalar
 
