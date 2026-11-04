@@ -76,6 +76,9 @@ Motor entegrasyon testleri, adı `test` içermeyen veritabanında çalışmayı 
 `fiyat-motoru import-products katalog.csv`. EAN kontrol hanesi doğrulanır; aynı marka + model kodu güncellenir.
 
 **Fiyatlar:**
+- **Chrome eklentisi** (`extension/`, kurulum: `extension/README.md`): baktığınız ürün sayfasında tek tıkla fiyat, EAN,
+  model, satıcı, stok sisteme düşer ve katalogla eşleşir. Sayfaları kendiliğinden gezmez. Web tarafı: `POST /api/capture`
+  (`CAPTURE_TOKEN` başlığı zorunlu).
 - **Pazaryeri kontrolü ekranı** (`/kontrol`): ürün × pazaryeri matrisi. Her hücrede durum (kontrol edilmedi / eski /
   Uşak ? / gönderim yok / güncel), pazaryerinin EAN ve model araması için doğrudan bağlantı ve “+ Gir” ile önseçimli fiyat
   formu. API olmadan çalışmanın ana yolu budur. Pazaryeri fiyatları “Alış + rakip satış fiyatı” olarak tek seferde iki
@@ -142,6 +145,8 @@ resmî/ithalatçı garantili, fiyat ≤ 48 saat) **ve** satış fiyatı test ver
 | MediaMarkt, Teknosa, Vatan, Koçtaş | ⛔ Bağlı değil | Bilinen herkese açık API yok. Affiliate ağı feed'i veya yazılı izin; tarama ancak robots.txt + kullanım koşulları izin verirse. |
 | Arçelik, Vestel, Bosch (marka/bayi) | ⛔ Bağlı değil | Bayi/distribütör fiyat listesi → `licensed_feed` CSV ile hemen kullanılabilir. |
 | Elle giriş, Uşak perakende | ✅ Çalışıyor | — |
+| akakçe | 🟡 Eklentiyle tek tıkla | robots.txt ürün sayfalarına izin veriyor, ancak kullanım sözleşmesi (md. 5.6, 7.5/b) listelerin izinsiz kopyalanmasını yasaklıyor; otomatik toplu çekim yapılmıyor. |
+| Tüm siteler | 🟡 Eklentiyle tek tıkla | Okuma schema.org JSON-LD üzerinden; gerçek sitelerde henüz denenmedi. |
 
 Bu geliştirme ortamının ağ politikası pazaryeri alan adlarına ve supabase.com'a erişime izin vermiyor; bu yüzden hiçbir
 kaynağa karşı canlı doğrulama yapılmadı.

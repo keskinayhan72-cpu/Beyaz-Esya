@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px system-ui, sans-serif; width: 360px; margin: 0; padding: 12px; color: #16191d; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #5d6673; margin-top: 6px; }
+  input, select { font: inherit; padding: 5px 6px; border: 1px solid #d5d9df; border-radius: 5px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  button { margin-top: 10px; width: 100%; padding: 8px; font-weight: 600; border: 0; border-radius: 6px; background: #1f5fbf; color: #fff; cursor: pointer; }
+  button.ghost { background: #eef1f5; color: #16191d; }
+  .msg { margin-top: 8px; padding: 7px 9px; border-radius: 6px; font-size: 12px; }
+  .ok { background: #e3f4ec; color: #11795a; } .bad { background: #fbe5e3; color: #b3261e; } .warn { background: #fdf1d6; color: #8a5a00; }
+  .muted { color: #5d6673; font-size: 11px; } .hidden { display: none; }
+  ul { margin: 4px 0; padding-left: 16px; } li { cursor: pointer; padding: 2px 0; } li:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <h1>Fiyatı Fırsat Motoru'na kaydet</h1>
+
+  <div id="settings" class="hidden">
+    <p class="muted">İlk kurulum: sunucu adresi ve web uygulamasının <code>.env.local</code> dosyasındaki <code>CAPTURE_TOKEN</code> değeri.</p>
+    <label>Sunucu adresi<input id="server" value="http://localhost:3000"></label>
+    <label>Eklenti anahtarı (CAPTURE_TOKEN)<input id="token" type="password"></label>
+    <button id="saveSettings">Ayarları kaydet</button>
+  </div>
+
+  <div id="main" class="hidden">
+    <div id="detected" class="muted"></div>
+    <div id="warnings"></div>
+    <div id="offersBox" class="hidden"><label>Sayfadaki satıcılar (seçince fiyat dolar)</label><ul id="offers"></ul></div>
+    <div class="row">
+      <label>Fiyat (KDV dahil ₺)<input id="price" inputmode="decimal"></label>
+      <label>Kargo (₺, boş = bilinmiyor)<input id="shipping" inputmode="decimal"></label>
+    </div>
+    <label>Satıcı<input id="seller"></label>
+    <div class="row">
+      <label>Stok<select id="inStock"><option value="">Bilinmiyor</option><option value="true">Stokta</option><option value="false">Yok</option></select></label>
+      <label>Durum<select id="condition"><option value="unknown">Bilinmiyor</option><option value="new">Sıfır</option><option value="refurbished">Yenilenmiş</option><option value="used">İkinci el</option></select></label>
+    </div>
+    <label>Uşak teslimatı<select id="delivery"><option value="not_verified">Kontrol etmedim</option><option value="verified">Uşak'a teslim var (kontrol ettim)</option><option value="restricted">Uşak'a gönderim yok</option></select></label>
+    <label id="noteWrap" class="hidden">Nasıl kontrol ettiniz<input id="note" placeholder="Ör: adres Uşak seçili, teslimat tarihi göründü"></label>
+    <label>Kaydet<select id="side"><option value="auto">Otomatik (pazaryeri: alış + rakip satış)</option><option value="buy">Yalnızca alış</option><option value="sell">Yalnızca rakip satış fiyatı</option></select></label>
+    <div id="pick" class="hidden">
+      <label>Katalogdan ürün seçin<input id="q" placeholder="Model kodu veya marka"></label>
+      <ul id="results"></ul>
+    </div>
+    <button id="save">Kaydet</button>
+    <div id="msg"></div>
+    <p class="muted"><a href="#" id="openSettings">Ayarlar</a></p>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

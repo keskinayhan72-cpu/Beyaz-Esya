@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { recordObservation } from "@/lib/db/observations";
 import { normalizeCode, normalizeGtin } from "@/lib/domain/identifiers";
 import { parseCsv, parseTrNumber } from "@/lib/format";
 
@@ -111,27 +112,15 @@ export async function addPriceObservation(_: ActionState, f: FormData): Promise<
   const client = await db().connect();
   try {
     await client.query("begin");
-    for (const side of sides) {
-      const offerUrl = url || `${sourceId}:urun:${productId}:${side}`;
-      const o = await client.query(
-        `insert into offers (source_id, side, product_id, match_method, source_url, seller_name)
-         values ($1,$2,$3,'manual',$4,$5)
-         on conflict (source_id, side, source_url) do update set seller_name = coalesce(excluded.seller_name, offers.seller_name)
-         returning id, product_id`,
-        [sourceId, side, productId, offerUrl, str(f, "seller_name") || null],
-      );
-      if (o.rows[0].product_id !== productId) throw new Error("Bu bağlantı başka bir ürüne eşlenmiş");
-      await client.query(
-        `insert into price_observations (offer_id, observed_at, origin, collected_by, price, shipping_fee, in_stock,
-           delivery, delivery_method_note, delivery_days, regional_restriction, invoice, warranty, warranty_months, condition)
-         values ($1, coalesce($2::timestamptz, now()), 'manual_entry', 'web:elle', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [
-          o.rows[0].id, str(f, "observed_at") || null, price, shipping, triBool(f, "in_stock"), delivery, note || null,
-          num(f, "delivery_days"), str(f, "regional_restriction") || null, str(f, "invoice") || "unknown",
-          str(f, "warranty") || "unknown", num(f, "warranty_months"), str(f, "condition") || "unknown",
-        ],
-      );
-    }
+    await recordObservation(client, {
+      productId, sourceId, sides: sides as ("buy" | "sell")[], url, sellerName: str(f, "seller_name") || null,
+      matchMethod: "manual", collectedBy: "web:elle", observedAt: str(f, "observed_at") || null, price,
+      shippingFee: shipping, inStock: triBool(f, "in_stock"), delivery: delivery as "verified" | "not_verified" | "restricted",
+      deliveryNote: note || null, deliveryDays: num(f, "delivery_days"),
+      regionalRestriction: str(f, "regional_restriction") || null, invoice: str(f, "invoice") || "unknown",
+      warranty: str(f, "warranty") || "unknown", warrantyMonths: num(f, "warranty_months"),
+      condition: str(f, "condition") || "unknown",
+    });
     await client.query("commit");
   } catch (e) {
     await client.query("rollback");
