@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id);
 let cfg = { server: "http://localhost:3000", token: "" };
 let product = null;
 let chosenProductId = null;
+let activeTabId = null;
 
 function show(id, on) { $(id).classList.toggle("hidden", !on); }
 function msg(text, cls, link) {
@@ -38,7 +39,7 @@ function collectPage() {
     const k = m.getAttribute("property") || m.getAttribute("name") || m.getAttribute("itemprop");
     if (k && m.content && !(k in meta)) meta[k] = m.content;
   }
-  return { url: location.href, jsonLd, meta, title: document.title };
+  return { url: location.href, jsonLd, meta, title: document.title, html: document.documentElement.outerHTML };
 }
 
 async function init() {
@@ -52,11 +53,12 @@ async function init() {
   // ?tabId= yalnızca otomatik testte kullanılır (popup ayrı sekmede açıldığında hedef sekme)
   const testTab = Number(new URLSearchParams(location.search).get("tabId"));
   const [tab] = testTab ? [{ id: testTab }] : await chrome.tabs.query({ active: true, currentWindow: true });
+  activeTabId = tab.id;
   let raw;
   try {
     [{ result: raw }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: collectPage });
-  } catch {
-    msg("Bu sayfa okunamıyor. Bir ürün sayfası açıp tekrar deneyin.", "bad"); $("save").disabled = true; return;
+  } catch (e) {
+    msg(`Bu sayfa okunamıyor. Bir ürün sayfası açıp tekrar deneyin. (${e?.message ?? e})`, "bad"); $("save").disabled = true; return;
   }
   product = extractProduct(raw);
   if (!product.source) {
@@ -76,7 +78,7 @@ async function init() {
     show("offersBox", true);
     for (const o of product.offers) {
       const li = document.createElement("li");
-      li.textContent = `${o.price.toLocaleString("tr-TR")} ₺ — ${o.seller ?? "satıcı adı yok"}`;
+      li.textContent = `${o.price.toLocaleString("tr-TR")} ₺ — ${o.seller ?? "satıcı adı yok"}${o.note ? ` (${o.note})` : ""}`;
       li.onclick = () => { $("price").value = String(o.price).replace(".", ","); $("seller").value = o.seller ?? ""; };
       $("offers").append(li);
     }
@@ -86,7 +88,17 @@ async function init() {
 $("delivery").onchange = () => show("noteWrap", $("delivery").value === "verified");
 $("openSettings").onclick = (e) => { e.preventDefault(); show("settings", true); };
 $("saveSettings").onclick = async () => {
-  await chrome.storage.local.set({ server: $("server").value.trim(), token: $("token").value.trim() });
+  const server = $("server").value.trim(), token = $("token").value.trim();
+  const fail = (text) => { $("settingsMsg").className = "msg bad"; $("settingsMsg").textContent = text; };
+  if (!/^[\x21-\x7e]{16,}$/.test(token)) return fail("Bu bir anahtar değil. Kutuyu temizleyip anahtarı yeniden yapıştırın.");
+  cfg = { server, token };
+  try {
+    const { status } = await api("/api/products?q=");
+    if (status !== 200) return fail("Sunucu bu anahtarı kabul etmedi. Kutuyu temizleyip anahtarı yeniden yapıştırın.");
+  } catch {
+    return fail("Sunucuya ulaşılamadı. Web uygulaması çalışıyor mu? (" + server + ")");
+  }
+  await chrome.storage.local.set({ server, token });
   location.reload();
 };
 
@@ -127,7 +139,8 @@ async function save() {
       show("pick", true);
       $("q").value = body.hint?.modelCode ?? body.hint?.brand ?? "";
       $("q").dispatchEvent(new Event("input"));
-      msg(`Katalogda eşleşmedi (${body.reason}). Aşağıdan ürünü seçin; katalogda yoksa önce web uygulamasında ekleyin.`, "warn");
+      await fillNewProduct();
+      msg(`Katalogda eşleşmedi (${body.reason}). Aşağıdan ürünü seçin ya da kataloğa ekleyin.`, "warn");
     } else {
       msg(body.error ?? `Hata (${status})`, "bad");
     }
@@ -137,6 +150,52 @@ async function save() {
     $("save").disabled = false;
   }
 }
+async function fillNewProduct() {
+  $("newName").value = product.name ?? "";
+  $("newBrand").value = product.brand ?? "";
+  $("newModel").value = product.modelCode ?? "";
+  $("newGtin").value = product.gtin ?? "";
+  if ($("newCategory").options.length) return;
+  const { body } = await api("/api/products?categories=1");
+  $("newCategory").append(new Option("Seçin", ""));
+  for (const c of body.categories ?? []) $("newCategory").append(new Option(c.name, c.slug));
+}
+
+$("addProduct").onclick = async () => {
+  const entry = { name: $("newName").value.trim(), brand: $("newBrand").value.trim(), modelCode: $("newModel").value.trim(), gtin: $("newGtin").value.trim() };
+  if (!entry.name || !entry.brand || !entry.modelCode) return msg("Ürün adı, marka ve model kodu gerekli.", "bad");
+  if (!$("newCategory").value) return msg("Kategoriyi seçin.", "bad");
+  $("addProduct").disabled = true;
+  try {
+    const { status, body } = await api("/api/products", { method: "POST", body: JSON.stringify({ ...entry, category: $("newCategory").value }) });
+    if (status !== 200) return msg(body.error ?? `Hata (${status})`, "bad");
+    // Kullanıcının onayladığı değerlerle eşleşsin diye sayfadan gelenlerin yerine geçer.
+    Object.assign(product, { name: entry.name, brand: entry.brand, modelCode: entry.modelCode, gtin: entry.gtin || null });
+    show("pick", false);
+    await save();
+  } catch {
+    msg("Sunucuya ulaşılamadı. Web uygulaması çalışıyor mu? (" + cfg.server + ")", "bad");
+  } finally {
+    $("addProduct").disabled = false;
+  }
+};
+
 $("save").onclick = save;
+
+// Yeni site kuralı yazmak için: açık sayfanın HTML'ini yalnızca yerel sunucuya kaydeder.
+$("savePage").onclick = async (e) => {
+  e.preventDefault();
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId: activeTabId },
+      func: () => ({ url: location.href, html: document.documentElement.outerHTML }),
+    });
+    const { status, body } = await api("/api/page-sample", { method: "POST", body: JSON.stringify(result) });
+    if (status === 200) msg(`Sayfa kaydedildi: ${body.file}`, "ok");
+    else msg(body.error ?? `Hata (${status})`, "bad");
+  } catch (err) {
+    msg(`Sayfa kaydedilemedi: ${err?.message ?? err}`, "bad");
+  }
+};
 
 init();

@@ -24,6 +24,7 @@
     <label>Sunucu adresi<input id="server" value="http://localhost:3000"></label>
     <label>Eklenti anahtarı (CAPTURE_TOKEN)<input id="token" type="password"></label>
     <button id="saveSettings">Ayarları kaydet</button>
+    <div id="settingsMsg"></div>
   </div>
 
   <div id="main" class="hidden">
@@ -45,10 +46,21 @@
     <div id="pick" class="hidden">
       <label>Katalogdan ürün seçin<input id="q" placeholder="Model kodu veya marka"></label>
       <ul id="results"></ul>
+      <p class="muted">Katalogda yoksa ekleyin. Değerler sayfadan geldi; ekrandakiyle karşılaştırıp düzeltin.</p>
+      <label>Ürün adı<input id="newName"></label>
+      <div class="row">
+        <label>Marka<input id="newBrand"></label>
+        <label>Tam model kodu<input id="newModel"></label>
+      </div>
+      <div class="row">
+        <label>EAN (boş olabilir)<input id="newGtin" inputmode="numeric"></label>
+        <label>Kategori<select id="newCategory"></select></label>
+      </div>
+      <button id="addProduct" class="ghost">Kataloğa ekle ve fiyatı kaydet</button>
     </div>
     <button id="save">Kaydet</button>
     <div id="msg"></div>
-    <p class="muted"><a href="#" id="openSettings">Ayarlar</a></p>
+    <p class="muted"><a href="#" id="openSettings">Ayarlar</a> · <a href="#" id="savePage">Tanı için sayfayı kaydet</a></p>
   </div>
   <script type="module" src="popup.js"></script>
 </body>

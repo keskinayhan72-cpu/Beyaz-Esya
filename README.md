@@ -57,6 +57,9 @@ python3 -m venv engine/.venv && engine/.venv/bin/pip install -e "engine[dev]"
 cd web && npm install && cp .env.example .env.local && npm run build && npm start   # http://localhost:3000
 ```
 
+**Windows:** `.sh` dosyaları Git Bash ile çalışır (`bash db/migrate.sh`). PostgreSQL kurulumu servis oluşturmazsa veritabanı kullanıcı
+klasöründe `initdb` ile kurulabilir; bu durumda açılışta kendiliğinden başlamaz, `scripts/baslat.cmd` veritabanını ve uygulamayı başlatır.
+
 Supabase'e geçiş: Supabase projesinde `DATABASE_URL=<Supabase connection string> ./db/migrate.sh`, ardından
 `web/.env.local` içindeki `DATABASE_URL`'i aynı değerle değiştirin.
 
@@ -146,8 +149,27 @@ resmî/ithalatçı garantili, fiyat ≤ 48 saat) **ve** satış fiyatı test ver
 | Arçelik, Vestel, Bosch (marka/bayi) | ⛔ Bağlı değil | Bayi/distribütör fiyat listesi → `licensed_feed` CSV ile hemen kullanılabilir. |
 | Elle giriş, Uşak perakende | ✅ Çalışıyor | — |
 | akakçe | 🟡 Eklentiyle tek tıkla | robots.txt ürün sayfalarına izin veriyor, ancak kullanım sözleşmesi (md. 5.6, 7.5/b) listelerin izinsiz kopyalanmasını yasaklıyor; otomatik toplu çekim yapılmıyor. |
-| Tüm siteler | 🟡 Eklentiyle tek tıkla | Okuma schema.org JSON-LD üzerinden; gerçek sitelerde henüz denenmedi. |
+| Trendyol, Hepsiburada, Amazon TR, n11, PttAVM, akakçe | ✅ Eklentiyle tek tıkla | Gerçek sayfalarda denendi: [sonuçlar](#eklenti-gerçek-site-testi). Otomatik tarama yok. |
+| Diğer siteler | 🟡 Eklentiyle tek tıkla | Okuma yalnızca schema.org JSON-LD üzerinden; gerçek sayfada denenmedi. Sorun çıkarsa "Tanı için sayfayı kaydet" ile örnek alınıp kural eklenir. |
 | Tüm siteler (otomatik) | 🟡 Okuyucu hazır, hiçbir kaynakta açık değil | `fiyat-motoru crawl --source <id>` (aşağıya bakın). 4 Kasım 2026 incelemesinde 12 sitenin hiçbiri uygun çıkmadı: 6'sı bot korumasıyla engelledi, diğerleri arama sayfalarını yasaklıyor, 403/CAPTCHA döndürüyor veya kullanım koşulları izin vermiyor. Ayrıntı aşağıdaki tabloda. |
+
+### Eklenti gerçek site testi
+
+4 Kasım 2026'da kullanıcının Chrome'da açtığı birer ürün sayfasıyla denendi; okunan değerler kullanıcının ekranıyla karşılaştırıldı.
+JSON-LD tek başına yetmedi, bu yüzden `extension/extract.js` içinde siteye özel okuma var (yalnızca sayfada zaten bulunan veri).
+
+| Site | Sonuç | Marka | Model kodu | EAN | Fiyat | Satıcı |
+|---|---|---|---|---|---|---|
+| Hepsiburada | 🟡 Kısmen | ✅ | ⚠️ Sayfada yok, addan tahmin | ⚠️ Çoğu üründe geçersiz veya mağaza içi kod, boş bırakılır | ✅ Sepete özel fiyat; sepetsiz fiyat seçilebilir | ✅ JSON-LD yanlış, sayfa verisinden |
+| Trendyol | 🟡 Kısmen | ✅ | ⚠️ Addan tahmin | ⚠️ Satıcı kodu olabilir; geçerli EAN değilse boş | ✅ | ✅ Sayfa verisinden |
+| n11 | 🟡 Kısmen | ✅ | ⚠️ Sayfada yok; addan bulunamazsa elle | ✅ | ✅ | ✅ Sayfa verisinden |
+| PttAVM | 🟡 Kısmen | ⚠️ JSON-LD'de satıcı adı var, addan alınır | ⚠️ Addan tahmin | ✅ | ✅ | ✅ |
+| Amazon TR | 🟡 Kısmen | ✅ Tablodan | ✅ Tablodan | ⛔ Sayfada yok | ✅ "Sepete Ekle" varsa; öne çıkan teklif yoksa okunmaz, elle girilir | ✅ |
+| akakçe | 🟡 Kısmen | ✅ | ⚠️ Addan tahmin | ⛔ Sayfada yok | ✅ En düşük fiyat | ✅ Görünen mağaza listesi satıcı seçimine aktarılır |
+
+Tahmin edilen model kodu her zaman uyarıyla gösterilir ve kaydetmeden önce düzeltilebilir. Bulanık eşleştirme yoktur: tahmin yanlışsa
+ürün katalogla eşleşmez ve eklenti katalogdan seçmenizi ister. Sitelerin sayfa yapısı değişirse okuma bozulabilir; bu kurallar tek örnek
+sayfaya dayanır.
 
 ### İzin incelemesi (4 Kasım 2026)
 

@@ -63,16 +63,114 @@ const COND = (c) => {
   return "unknown";
 };
 
+// sku bilerek kullanılmaz: gerçek sayfalarda pazaryerinin kendi stok numarası (HBCV..., 333664476).
 function pickModel(p) {
   const model = typeof p.model === "object" && p.model !== null ? p.model.name : p.model;
-  for (const v of [p.mpn, model, p.sku]) {
-    if (v !== undefined && v !== null && typeof v !== "object" && String(v).trim()) return String(v).trim();
+  for (const v of [p.mpn, model]) {
+    if (v === undefined || v === null || typeof v === "object") continue;
+    const s = String(v).trim();
+    if (s && s !== String(p.sku ?? "").trim() && !/^\d{7,}$/.test(s)) return s;
   }
   return null;
 }
 
+/** Ürün adından model kodu önerisi. Her zaman uyarıyla gösterilir; kullanıcı kontrol eder. */
+export function guessModel(name, brand) {
+  let rest = String(name ?? "").trim();
+  if (brand && rest.toLocaleLowerCase("tr").startsWith(String(brand).toLocaleLowerCase("tr"))) rest = rest.slice(String(brand).length);
+  const tokens = rest.trim().split(/\s+/).map((t) => t.replace(/^[(,]+|[),:;|]+$/g, ""));
+  const isCode = (t) => t.length >= 4 && /[a-zğüşıöç]/i.test(t) && (t.match(/\d/g) ?? []).length >= 2 && !/^\d+[.,]?\d*[a-zğüşıöç]{1,4}$/i.test(t);
+  const direct = tokens.find(isCode);
+  if (direct) return direct;
+  // "Grundig GPDF 4711", "Şenocak Vfn 7274": yalnızca markadan hemen sonra gelirse.
+  if (brand && tokens.length > 1 && /^[a-z]{2,6}$/i.test(tokens[0]) && /^\d{3,}$/.test(tokens[1])) return `${tokens[0]} ${tokens[1]}`;
+  return null;
+}
+
+/** Kontrol hanesi tutan, küresel barkod. Mağaza içi aralık (20-29) ve geçersizler elenir. */
+export function checkGtin(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return { gtin: null, warning: null };
+  const digits = raw.replace(/[\s-]/g, "");
+  const invalid = { gtin: null, warning: `Sayfadaki barkod geçerli bir EAN değil (${raw}); EAN boş bırakıldı` };
+  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(digits)) return invalid;
+  const body = [...digits.slice(0, -1)].reverse();
+  const sum = body.reduce((acc, d, i) => acc + Number(d) * (i % 2 === 0 ? 3 : 1), 0);
+  if ((10 - (sum % 10)) % 10 !== Number(digits.at(-1))) return invalid;
+  if (/^0*2\d{12}$/.test(digits))
+    return { gtin: null, warning: `Sayfadaki barkod mağaza içi kod (${raw}), küresel EAN değil; EAN boş bırakıldı` };
+  return { gtin: digits, warning: null };
+}
+
+const unescapeJson = (s) => { try { return JSON.parse(`"${s}"`); } catch { return s; } };
+const decodeHtml = (s) => s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ");
+const grab = (html, re) => { const m = html.match(re); return m ? decodeHtml(unescapeJson(m[1])).trim() || null : null; };
+
+/** akakçe: JSON-LD ilk mağazaları verir; ekrandaki satır listesi tamamıdır. */
+function akakceOffers(html) {
+  const out = new Map();
+  for (const m of html.matchAll(/class="v_v8">(?:Satıcı:\s*)?<img[^>]*\balt="([^"]*)"[^>]*>([^<]*)/g)) {
+    const before = html.slice(Math.max(0, m.index - 1500), m.index);
+    const pr = [...before.matchAll(/pt_v8 ?">([\d.]+)<i>,(\d{2}) TL/g)].pop();
+    if (!pr) continue; // fiyatsız satır (reklam / liste dışı)
+    const seller = decodeHtml(`${m[1]}${m[2]}`).replace(/\s+/g, " ").trim();
+    const price = toNumber(`${pr[1]},${pr[2]}`);
+    out.set(`${price}|${seller}`, { price, seller }); // üstteki öne çıkan satır listede tekrar eder
+  }
+  return [...out.values()];
+}
+
 /**
- * raw: { url, jsonLd: string[], meta: Record<string,string>, title }
+ * Siteye özel okuma: yalnızca sayfada zaten bulunan veriyi kullanır (raw.html, kullanıcının açtığı sayfa).
+ * Dönen alanlar JSON-LD'nin yanlış veya eksik olduğu yerleri düzeltir.
+ */
+function siteData(source, html, p) {
+  if (!html) return {};
+  switch (source) {
+    case "hepsiburada":
+      return {
+        seller: grab(html, /"merchantName":"([^"]+)"/),
+        basketPrice: toNumber(grab(html, /Sepete özel fiyat<\/span><\/div><div[^>]*>\s*([\d.,]+)\s*TL/)),
+      };
+    case "trendyol":
+      return {
+        seller: grab(html, /"merchantListing":\{"merchant":\{"id":\d+,"name":"((?:[^"\\]|\\.)+)"/) ?? grab(html, /merchant-name">([^<]+)</),
+        gtinRaw: grab(html, /"barcode":"([^"]+)"/),
+      };
+    case "n11":
+      return {
+        seller: grab(html, /title="([^"]+)" class="sidebarSellerArea-top-name"/),
+        condition: /"secondHand":false/.test(html) ? "new" : null,
+        name: p?.name ? String(p.name).replace(/\s+Fiyatları ve Özellikleri$/, "") : null,
+        gtinRaw: p?.sku ? grab(html, new RegExp(`"gtin":"(\\d+)","id":${String(p.sku).replace(/\D/g, "")}\\b`)) : null,
+      };
+    case "pttavm": {
+      const ext = [].concat(p?.additionalProperty ?? []).find((a) => a?.name === "External ID");
+      const seller = p ? [].concat(p.offers ?? [])[0]?.seller?.name : null;
+      const brand = p && typeof p.brand === "object" ? p.brand?.name : p?.brand;
+      // PttAVM marka alanına satıcı adını yazıyor; ürün adının ilk sözcüğü gerçek markadır.
+      return { gtinRaw: ext?.value ?? null, brandFromName: !!seller && seller === brand };
+    }
+    case "amazon_tr":
+      return {
+        name: grab(html, /id="productTitle"[^>]*>\s*([^<]+?)\s*</),
+        brand: grab(html, /Marka Adı\s*<\/th>\s*<td[^>]*>\s*([^<]+?)\s*</),
+        modelCode: grab(html, /Model Numarası\s*<\/th>\s*<td[^>]*>\s*([^<]+?)\s*</),
+        noOffer: /id="unqualifiedBuyBox"/.test(html),
+        price: toNumber(grab(html, /id="corePriceDisplay_desktop_feature_div"[\s\S]{0,8000}?data-csa-c-price-to-pay="([\d.]+)"/)),
+        seller: grab(html, /offer-display-feature-name="desktop-merchant-info"[\s\S]{0,4000}?offer-display-feature-text-message">\s*([^<]+?)\s*</),
+        inStock: /id="add-to-cart-button"/.test(html) ? true : null,
+        condition: /id="corePriceDisplay_desktop_feature_div"[\s\S]{0,8000}?data-csa-c-buying-option-type="NEW"/.test(html) ? "new" : null,
+      };
+    case "akakce":
+      return { visibleOffers: akakceOffers(html) };
+    default:
+      return {};
+  }
+}
+
+/**
+ * raw: { url, jsonLd: string[], meta: Record<string,string>, title, html? }
  * Dönüş: { source, url, name, brand, modelCode, gtin, price, inStock, condition, seller, offers[], warnings[] }
  */
 export function extractProduct(raw) {
@@ -90,11 +188,17 @@ export function extractProduct(raw) {
       currency: o.priceCurrency ?? "TRY",
       seller: typeof o.seller === "object" ? o.seller?.name ?? null : o.seller ?? null,
       inStock: AVAIL(o.availability),
-      condition: COND(o.itemCondition),
+      condition: COND(o.itemCondition ?? p?.itemCondition),
       aggregate: !!o._aggregate,
     }))
     .filter((o) => o.price !== null && String(o.currency).toUpperCase() === "TRY");
   priced.sort((a, b) => a.price - b.price);
+
+  const source = sourceForUrl(raw.url);
+  const site = siteData(source, raw.html, p);
+  if (!priced.length && site.price) {
+    priced.push({ price: site.price, currency: "TRY", seller: null, inStock: site.inStock ?? null, condition: "unknown", aggregate: false });
+  }
 
   let best = priced[0] ?? null;
   if (!best) {
@@ -102,19 +206,54 @@ export function extractProduct(raw) {
     const cur = (meta["product:price:currency"] ?? meta["og:price:currency"] ?? "TRY").toUpperCase();
     if (mp && cur === "TRY") best = { price: mp, seller: null, inStock: null, condition: "unknown", aggregate: false };
   }
-  if (!p) warnings.push("Sayfada yapılandırılmış ürün verisi (JSON-LD) bulunamadı");
+  if (!p && !site.name) warnings.push("Sayfada yapılandırılmış ürün verisi (JSON-LD) bulunamadı");
   if (!best) warnings.push("Fiyat okunamadı — elle girin");
   if (best?.aggregate) warnings.push("Sayfa yalnızca en düşük fiyatı veriyor; satıcıyı kontrol edin");
 
-  const brand = p ? (typeof p.brand === "object" ? p.brand?.name : p.brand) ?? null : null;
-  const gtin = p ? String(p.gtin13 ?? p.gtin ?? p.gtin14 ?? p.gtin12 ?? p.gtin8 ?? "").replace(/\D/g, "") || null : null;
+  const name = site.name ?? p?.name ?? meta["og:title"] ?? raw.title ?? null;
+
+  let brand = site.brand ?? (p ? (typeof p.brand === "object" ? p.brand?.name : p.brand) ?? null : null);
+  if (site.brandFromName) {
+    brand = String(name ?? "").trim().split(/\s+/)[0] || null;
+    warnings.push("Marka ürün adından alındı; kontrol edin");
+  }
+
+  let modelCode = site.modelCode ?? (p ? pickModel(p) : null);
+  if (!modelCode && (p || site.name)) {
+    modelCode = guessModel(name, brand);
+    warnings.push(modelCode ? "Model kodu ürün adından tahmin edildi; kontrol edin" : "Model kodu sayfada yok; kendiniz yazın");
+  }
+
+  const checked = checkGtin(site.gtinRaw ?? (p ? p.gtin13 ?? p.gtin ?? p.gtin14 ?? p.gtin12 ?? p.gtin8 : null));
+  if (checked.warning) warnings.push(checked.warning);
+
+  if (site.noOffer && !best) warnings.push("Bu sayfada öne çıkan teklif yok; fiyatı 'Satın Alma Seçenekleri'nden görüp elle girin");
+
+  if (site.visibleOffers?.length > priced.length) {
+    const known = new Map(priced.map((o) => [o.seller, o]));
+    const merged = site.visibleOffers.map((o) => ({ currency: "TRY", inStock: null, condition: "unknown", aggregate: false, ...known.get(o.seller), ...o }));
+    priced.splice(0, priced.length, ...merged.sort((a, b) => a.price - b.price));
+    best = priced[0];
+  }
+  if (best && site.condition && best.condition === "unknown") best.condition = site.condition;
+  if (best && site.seller) {
+    best.seller = site.seller;
+  }
+  if (best && site.basketPrice && site.basketPrice < best.price) {
+    const list = best.price;
+    warnings.push(`Sepete özel fiyat kullanıldı; sepetsiz fiyat ${list.toLocaleString("tr-TR")} ₺`);
+    priced.unshift({ ...best, price: site.basketPrice, note: "sepete özel" });
+    best.note = "sepetsiz";
+    best = priced[0];
+  }
+
   return {
-    source: sourceForUrl(raw.url),
+    source,
     url: raw.url,
-    name: p?.name ?? meta["og:title"] ?? raw.title ?? null,
+    name,
     brand: brand ? String(brand) : null,
-    modelCode: p ? pickModel(p) : null,
-    gtin,
+    modelCode,
+    gtin: checked.gtin,
     price: best?.price ?? null,
     inStock: best?.inStock ?? null,
     condition: best?.condition ?? "unknown",

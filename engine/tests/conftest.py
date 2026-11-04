@@ -27,7 +27,7 @@ def db():
     assert "test" in url, "Güvenlik: TEST_DATABASE_URL adı 'test' içermeli (gerçek veritabanını silmemek için)"
     with psycopg.connect(url, autocommit=True) as c:
         c.execute("drop schema public cascade; create schema public;")
-    subprocess.run([str(ROOT / "db/migrate.sh")], env={**os.environ, "DATABASE_URL": url}, check=True,
+    subprocess.run(["bash", (ROOT / "db/migrate.sh").as_posix()], env={**os.environ, "DATABASE_URL": url}, check=True,
                    capture_output=True)
     with psycopg.connect(url) as c:
         yield c
